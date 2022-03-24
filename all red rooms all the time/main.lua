@@ -34,9 +34,11 @@ function mod:onNewLevel()
     return
   end
   
-  mod:makeAllRedRoomDoors()
+  local shouldReloadFirstRoom = mod:makeAllRedRoomDoors()
   mod:makeRedRoomsVisible()
-  mod:reloadFirstRoom()
+  if shouldReloadFirstRoom then
+    mod:reloadFirstRoom()
+  end
   mod:closeErrorDoors()
 end
 
@@ -54,9 +56,11 @@ function mod:onNewRoom()
     end
     mod.playerPosition = nil
   elseif (currentDimension == 1 or currentDimension == 2) and mod:isNewDimension() then
-    mod:makeAllRedRoomDoors()
+    local shouldReloadFirstRoom = mod:makeAllRedRoomDoors()
     mod:makeRedRoomsVisible() -- sometimes red rooms won't be visible even if you have mapping, this generally happens when you switch dimensions
-    mod:reloadFirstRoom()
+    if shouldReloadFirstRoom then
+      mod:reloadFirstRoom()
+    end
   end
   
   mod:closeErrorDoors()
@@ -112,10 +116,12 @@ function mod:makeAllRedRoomDoors()
   
   if stage == LevelStage.STAGE8 and currentDimension == 0 then -- home, red rooms are only available every other row and don't connect to each other
     level:MakeRedRoomDoor(95, DoorSlot.LEFT0) -- create the default red room closet
+    return false
   elseif (stage == LevelStage.STAGE2_2 or (mod:isCurseOfTheLabyrinth() and stage == LevelStage.STAGE2_1)) and (stageType == StageType.STAGETYPE_REPENTANCE or stageType == StageType.STAGETYPE_REPENTANCE_B) and
          currentDimension == 1
   then
     -- mines escape sequence
+    return false
   else
     local illegalDoorSlots = mod:getIllegalDoorSlots()
     
@@ -123,6 +129,8 @@ function mod:makeAllRedRoomDoors()
       mod:makeRedRoomDoors(gridIdx, illegalDoorSlots)
     end
     mod:makeRedRoomDoors(0, illegalDoorSlots) -- otherwise I AM ERROR rooms might not be available from this room
+    
+    return true
   end
 end
 
