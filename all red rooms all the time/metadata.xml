@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata>
+    <name>All Red Rooms All The Time</name>
+    <directory>all red rooms all the time</directory>
+    <id>2783890529</id>
+    <description>This is a fun mod that fills out the map with red rooms at the start of each floor (and alternate dimensions). You can very quickly become overpowered if you decide to go through all the red rooms.
+
+Red rooms will not be created in the following locations:
+[list]
+    [*]Challenges: I don't want to modify challenges.
+    [*]Greed mode: Red rooms are rare and don't usually connect to each other.
+    [*]Mines escape sequence: Red rooms don't connect to the main map.
+    [*]Home: Red rooms are only available as closets that don't connect to each other. The default red room closet will be created.
+[/list]
+
+By default, any red room doors that lead to I AM ERROR rooms will automatically close. This can be toggled via Mod Config Menu. These can show up at the edge of the map or elsewhere.
+
+Sometimes red room doors in the first room don't show up correctly. By default, the first room is reloaded to work around this issue. This can break true co-op so it can be toggled via Mod Config Menu.</description>
+    <version>1.1</version>
+    <visibility>Public</visibility>
+    <tag id="Lua"/>
+    <tag id="Rooms"/>
+    <tag id="Floors"/>
+    <tag id="Tweaks"/>
+</metadata>
