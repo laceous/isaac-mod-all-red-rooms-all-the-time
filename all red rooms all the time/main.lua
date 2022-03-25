@@ -258,6 +258,7 @@ function mod:makeRedRoomsVisible()
 end
 
 -- for whatever reason the game will create bad red room doors at the mirror & secret entrances, which breaks them
+-- also filter boss rooms so we don't remove any slots that might be needed for angel/devil rooms
 function mod:getIllegalDoorSlots()
   local level = game:GetLevel()
   local rooms = level:GetRooms()
@@ -273,105 +274,107 @@ function mod:getIllegalDoorSlots()
     local roomShape = room.Data.Shape
     local roomDimension = mod:getDimension(room)
     
-    if (stage == LevelStage.STAGE1_2 or (mod:isCurseOfTheLabyrinth() and stage == LevelStage.STAGE1_1)) and (stageType == StageType.STAGETYPE_REPENTANCE or stageType == StageType.STAGETYPE_REPENTANCE_B) and
-       currentDimension == roomDimension and (roomDimension == 0 or roomDimension == 1) and room.Data.Name == 'Mirror Room'
-    then
-      if room.Data.Variant == 10000 then -- mirror on right
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
-        table.insert(illegal, { gridIdx = room.GridIndex + 1, doorSlot = DoorSlot.LEFT0 })
-      elseif room.Data.Variant == 10001 then -- mirror on left
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
-        table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
-      end
-    elseif (stage == LevelStage.STAGE2_2 or (mod:isCurseOfTheLabyrinth() and stage == LevelStage.STAGE2_1)) and (stageType == StageType.STAGETYPE_REPENTANCE or stageType == StageType.STAGETYPE_REPENTANCE_B) and
-           currentDimension == roomDimension and roomDimension == 0 and room.Data.Name == 'Secret Entrance'
-    then
-      table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 }) -- mines entrance is up
-      table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
-    elseif roomType == RoomType.ROOM_BOSS and stage ~= LevelStage.STAGE7 then -- don't need to filter boss rooms in the void
-      if roomShape == RoomShape.ROOMSHAPE_1x1 or roomShape == RoomShape.ROOMSHAPE_IH or roomShape == RoomShape.ROOMSHAPE_IV then
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN0 })
-        if not mod:isAgainstLeftEdge(room.GridIndex) then
-          table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
-        end
-        if not mod:isAgainstTopEdge(room.GridIndex) then
-          table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
-        end
-        if not mod:isAgainstRightEdge(room.GridIndex) then
+    if room.GridIndex >= 0 and currentDimension == roomDimension then
+      if (stage == LevelStage.STAGE1_2 or (mod:isCurseOfTheLabyrinth() and stage == LevelStage.STAGE1_1)) and (stageType == StageType.STAGETYPE_REPENTANCE or stageType == StageType.STAGETYPE_REPENTANCE_B) and
+         (roomDimension == 0 or roomDimension == 1) and room.Data.Name == 'Mirror Room'
+      then
+        if room.Data.Variant == 10000 then -- mirror on right
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
           table.insert(illegal, { gridIdx = room.GridIndex + 1, doorSlot = DoorSlot.LEFT0 })
-        end
-        if not mod:isAgainstBottomEdge(room.GridIndex) then
-          table.insert(illegal, { gridIdx = room.GridIndex + 13, doorSlot = DoorSlot.UP0 })
-        end
-      elseif roomShape == RoomShape.ROOMSHAPE_1x2 then
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN0 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT1 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT1 })
-        if not mod:isAgainstLeftEdge(room.GridIndex) then
-          table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
-          table.insert(illegal, { gridIdx = room.GridIndex + 13 - 1, doorSlot = DoorSlot.RIGHT0 })
-        end
-        if not mod:isAgainstTopEdge(room.GridIndex) then
-          table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
-        end
-        if not mod:isAgainstRightEdge(room.GridIndex) then
-          table.insert(illegal, { gridIdx = room.GridIndex + 1, doorSlot = DoorSlot.LEFT0 })
-          table.insert(illegal, { gridIdx = room.GridIndex + 13 + 1, doorSlot = DoorSlot.LEFT0 })
-        end
-        if not mod:isAgainstBottomEdge(room.GridIndex + 13) then
-          table.insert(illegal, { gridIdx = room.GridIndex + 13 + 13, doorSlot = DoorSlot.UP0 })
-        end
-      elseif roomShape == RoomShape.ROOMSHAPE_2x1 then
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN0 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP1 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN1 })
-        if not mod:isAgainstLeftEdge(room.GridIndex) then
+        elseif room.Data.Variant == 10001 then -- mirror on left
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
           table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
         end
-        if not mod:isAgainstTopEdge(room.GridIndex) then
-          table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
-          table.insert(illegal, { gridIdx = room.GridIndex - 13 + 1, doorSlot = DoorSlot.DOWN0 })
-        end
-        if not mod:isAgainstRightEdge(room.GridIndex + 1) then
-          table.insert(illegal, { gridIdx = room.GridIndex + 1 + 1, doorSlot = DoorSlot.LEFT0 })
-        end
-        if not mod:isAgainstBottomEdge(room.GridIndex) then
-          table.insert(illegal, { gridIdx = room.GridIndex + 13, doorSlot = DoorSlot.UP0 })
-          table.insert(illegal, { gridIdx = room.GridIndex + 13 + 1, doorSlot = DoorSlot.UP0 })
-        end
-      elseif roomShape == RoomShape.ROOMSHAPE_2x2 then
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN0 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT1 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP1 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT1 })
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN1 })
-        if not mod:isAgainstLeftEdge(room.GridIndex) then
-          table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
-          table.insert(illegal, { gridIdx = room.GridIndex + 13 - 1, doorSlot = DoorSlot.RIGHT0 })
-        end
-        if not mod:isAgainstTopEdge(room.GridIndex) then
-          table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
-          table.insert(illegal, { gridIdx = room.GridIndex - 13 + 1, doorSlot = DoorSlot.DOWN0 })
-        end
-        if not mod:isAgainstRightEdge(room.GridIndex + 1) then
-          table.insert(illegal, { gridIdx = room.GridIndex + 1 + 1, doorSlot = DoorSlot.LEFT0 })
-          table.insert(illegal, { gridIdx = room.GridIndex + 13 + 1 + 1, doorSlot = DoorSlot.LEFT0 })
-        end
-        if not mod:isAgainstBottomEdge(room.GridIndex + 13) then
-          table.insert(illegal, { gridIdx = room.GridIndex + 13 + 13, doorSlot = DoorSlot.UP0 })
-          table.insert(illegal, { gridIdx = room.GridIndex + 13 + 13 + 1, doorSlot = DoorSlot.UP0 })
+      elseif (stage == LevelStage.STAGE2_2 or (mod:isCurseOfTheLabyrinth() and stage == LevelStage.STAGE2_1)) and (stageType == StageType.STAGETYPE_REPENTANCE or stageType == StageType.STAGETYPE_REPENTANCE_B) and
+             roomDimension == 0 and room.Data.Name == 'Secret Entrance'
+      then
+        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 }) -- mines entrance is up
+        table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
+      elseif roomType == RoomType.ROOM_BOSS and stage ~= LevelStage.STAGE7 and roomDimension == 0 then -- don't need to filter boss rooms in the void
+        if roomShape == RoomShape.ROOMSHAPE_1x1 or roomShape == RoomShape.ROOMSHAPE_IH or roomShape == RoomShape.ROOMSHAPE_IV then
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN0 })
+          if not mod:isAgainstLeftEdge(room.GridIndex) then
+            table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
+          end
+          if not mod:isAgainstTopEdge(room.GridIndex) then
+            table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
+          end
+          if not mod:isAgainstRightEdge(room.GridIndex) then
+            table.insert(illegal, { gridIdx = room.GridIndex + 1, doorSlot = DoorSlot.LEFT0 })
+          end
+          if not mod:isAgainstBottomEdge(room.GridIndex) then
+            table.insert(illegal, { gridIdx = room.GridIndex + 13, doorSlot = DoorSlot.UP0 })
+          end
+        elseif roomShape == RoomShape.ROOMSHAPE_1x2 then
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN0 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT1 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT1 })
+          if not mod:isAgainstLeftEdge(room.GridIndex) then
+            table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
+            table.insert(illegal, { gridIdx = room.GridIndex + 13 - 1, doorSlot = DoorSlot.RIGHT0 })
+          end
+          if not mod:isAgainstTopEdge(room.GridIndex) then
+            table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
+          end
+          if not mod:isAgainstRightEdge(room.GridIndex) then
+            table.insert(illegal, { gridIdx = room.GridIndex + 1, doorSlot = DoorSlot.LEFT0 })
+            table.insert(illegal, { gridIdx = room.GridIndex + 13 + 1, doorSlot = DoorSlot.LEFT0 })
+          end
+          if not mod:isAgainstBottomEdge(room.GridIndex + 13) then
+            table.insert(illegal, { gridIdx = room.GridIndex + 13 + 13, doorSlot = DoorSlot.UP0 })
+          end
+        elseif roomShape == RoomShape.ROOMSHAPE_2x1 then
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN0 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP1 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN1 })
+          if not mod:isAgainstLeftEdge(room.GridIndex) then
+            table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
+          end
+          if not mod:isAgainstTopEdge(room.GridIndex) then
+            table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
+            table.insert(illegal, { gridIdx = room.GridIndex - 13 + 1, doorSlot = DoorSlot.DOWN0 })
+          end
+          if not mod:isAgainstRightEdge(room.GridIndex + 1) then
+            table.insert(illegal, { gridIdx = room.GridIndex + 1 + 1, doorSlot = DoorSlot.LEFT0 })
+          end
+          if not mod:isAgainstBottomEdge(room.GridIndex) then
+            table.insert(illegal, { gridIdx = room.GridIndex + 13, doorSlot = DoorSlot.UP0 })
+            table.insert(illegal, { gridIdx = room.GridIndex + 13 + 1, doorSlot = DoorSlot.UP0 })
+          end
+        elseif roomShape == RoomShape.ROOMSHAPE_2x2 then
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN0 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT1 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP1 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT1 })
+          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN1 })
+          if not mod:isAgainstLeftEdge(room.GridIndex) then
+            table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
+            table.insert(illegal, { gridIdx = room.GridIndex + 13 - 1, doorSlot = DoorSlot.RIGHT0 })
+          end
+          if not mod:isAgainstTopEdge(room.GridIndex) then
+            table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
+            table.insert(illegal, { gridIdx = room.GridIndex - 13 + 1, doorSlot = DoorSlot.DOWN0 })
+          end
+          if not mod:isAgainstRightEdge(room.GridIndex + 1) then
+            table.insert(illegal, { gridIdx = room.GridIndex + 1 + 1, doorSlot = DoorSlot.LEFT0 })
+            table.insert(illegal, { gridIdx = room.GridIndex + 13 + 1 + 1, doorSlot = DoorSlot.LEFT0 })
+          end
+          if not mod:isAgainstBottomEdge(room.GridIndex + 13) then
+            table.insert(illegal, { gridIdx = room.GridIndex + 13 + 13, doorSlot = DoorSlot.UP0 })
+            table.insert(illegal, { gridIdx = room.GridIndex + 13 + 13 + 1, doorSlot = DoorSlot.UP0 })
+          end
         end
       end
     end
