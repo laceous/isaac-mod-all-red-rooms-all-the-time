@@ -16,7 +16,7 @@ Red rooms will not be created in the following locations:
 By default, any red room doors that lead to I AM ERROR rooms will automatically close. This can be toggled via Mod Config Menu. These can show up at the edge of the map or elsewhere.
 
 Sometimes red room doors in the first room don't show up correctly. By default, the first room is reloaded to work around this issue. This can break true co-op so it can be toggled via Mod Config Menu.</description>
-    <version>1.3</version>
+    <version>1.4</version>
     <visibility>Public</visibility>
     <tag id="Lua"/>
     <tag id="Rooms"/>

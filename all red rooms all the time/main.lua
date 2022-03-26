@@ -280,16 +280,22 @@ function mod:getIllegalDoorSlots()
       then
         if room.Data.Variant == 10000 then -- mirror on right
           table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
-          table.insert(illegal, { gridIdx = room.GridIndex + 1, doorSlot = DoorSlot.LEFT0 })
+          if not mod:isAgainstRightEdge(room.GridIndex) then
+            table.insert(illegal, { gridIdx = room.GridIndex + 1, doorSlot = DoorSlot.LEFT0 })
+          end
         elseif room.Data.Variant == 10001 then -- mirror on left
           table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
-          table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
+          if not mod:isAgainstLeftEdge(room.GridIndex) then
+            table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
+          end
         end
       elseif (stage == LevelStage.STAGE2_2 or (mod:isCurseOfTheLabyrinth() and stage == LevelStage.STAGE2_1)) and (stageType == StageType.STAGETYPE_REPENTANCE or stageType == StageType.STAGETYPE_REPENTANCE_B) and
              roomDimension == 0 and room.Data.Name == 'Secret Entrance'
       then
         table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 }) -- mines entrance is up
-        table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
+        if not mod:isAgainstTopEdge(room.GridIndex) then
+          table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
+        end
       elseif roomType == RoomType.ROOM_BOSS and stage ~= LevelStage.STAGE7 and roomDimension == 0 then -- don't need to filter boss rooms in the void or mirror dimension
         if roomShape == RoomShape.ROOMSHAPE_1x1 or roomShape == RoomShape.ROOMSHAPE_IH or roomShape == RoomShape.ROOMSHAPE_IV then
           table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
