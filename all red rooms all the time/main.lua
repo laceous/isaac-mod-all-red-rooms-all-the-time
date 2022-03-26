@@ -290,7 +290,7 @@ function mod:getIllegalDoorSlots()
       then
         table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 }) -- mines entrance is up
         table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
-      elseif roomType == RoomType.ROOM_BOSS and stage ~= LevelStage.STAGE7 and roomDimension == 0 then -- don't need to filter boss rooms in the void
+      elseif roomType == RoomType.ROOM_BOSS and stage ~= LevelStage.STAGE7 and roomDimension == 0 then -- don't need to filter boss rooms in the void or mirror dimension
         if roomShape == RoomShape.ROOMSHAPE_1x1 or roomShape == RoomShape.ROOMSHAPE_IH or roomShape == RoomShape.ROOMSHAPE_IV then
           table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
           table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 })
