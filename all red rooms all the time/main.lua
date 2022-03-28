@@ -3,8 +3,10 @@ local json = require('json')
 local game = Game()
 
 mod.playerPosition = nil
+mod.enabledOptions = { 'disabled', 'normal + hard', 'normal + hard + challenges' }
 
 mod.state = {}
+mod.state.enabledOption = 'normal + hard'
 mod.state.closeErrorDoors = true
 mod.state.reloadFirstRoom = true
 
@@ -13,6 +15,9 @@ function mod:loadData()
     local _, state = pcall(json.decode, mod:LoadData())
     
     if type(state) == 'table' then
+      if type(state.enabledOption) == 'string' and mod:getEnabledOptionsIndex(state.enabledOption) >= 1 then
+        mod.state.enabledOption = state.enabledOption
+      end
       if type(state.closeErrorDoors) == 'boolean' then
         mod.state.closeErrorDoors = state.closeErrorDoors
       end
@@ -28,9 +33,7 @@ function mod:onGameExit()
 end
 
 function mod:onNewLevel()
-  -- don't mess with challenges
-  -- red rooms are very sparse in greed mode
-  if Isaac.GetChallenge() ~= Challenge.CHALLENGE_NULL or game:IsGreedMode() then
+  if mod:isDisabled() then
     return
   end
   
@@ -43,7 +46,7 @@ function mod:onNewLevel()
 end
 
 function mod:onNewRoom()
-  if Isaac.GetChallenge() ~= Challenge.CHALLENGE_NULL or game:IsGreedMode() then
+  if mod:isDisabled() then
     return
   end
   
@@ -67,11 +70,17 @@ function mod:onNewRoom()
 end
 
 function mod:onUpdate()
-  if Isaac.GetChallenge() ~= Challenge.CHALLENGE_NULL or game:IsGreedMode() then
+  if mod:isDisabled() then
     return
   end
   
   mod:closeErrorDoors()
+end
+
+function mod:isDisabled()
+  return mod.state.enabledOption == 'disabled' or
+         (Isaac.GetChallenge() ~= Challenge.CHALLENGE_NULL and mod.state.enabledOption ~= 'normal + hard + challenges') or
+         game:IsGreedMode()
 end
 
 function mod:reloadFirstRoom()
@@ -489,8 +498,39 @@ function mod:isCurseOfTheLabyrinth()
   return curses & curse == curse
 end
 
+function mod:getEnabledOptionsIndex(option)
+  for i, value in ipairs(mod.enabledOptions) do
+    if option == value then
+      return i
+    end
+  end
+  
+  return -1
+end
+
 -- start ModConfigMenu --
 function mod:setupModConfigMenu()
+  ModConfigMenu.AddText('ARRATT', mod.Name, 'Choose where to enable this mod:')
+  ModConfigMenu.AddSetting(
+    'ARRATT',
+    mod.Name,
+    {
+      Type = ModConfigMenu.OptionType.NUMBER,
+      CurrentSetting = function()
+        return mod:getEnabledOptionsIndex(mod.state.enabledOption)
+      end,
+      Minimum = 1,
+      Maximum = #mod.enabledOptions,
+      Display = function()
+        return mod.state.enabledOption
+      end,
+      OnChange = function(n)
+        mod.state.enabledOption = mod.enabledOptions[n]
+      end,
+      Info = { 'Red rooms are only created at the', 'start of a new level or dimension' }
+    }
+  )
+  ModConfigMenu.AddSpace('ARRATT', mod.Name)
   ModConfigMenu.AddSetting(
     'ARRATT',
     mod.Name,
@@ -505,7 +545,7 @@ function mod:setupModConfigMenu()
       OnChange = function(b)
         mod.state.closeErrorDoors = b
       end,
-      Info = { 'Creating a red room door can lead off the map', 'to an I AM ERROR room' }
+      Info = { 'Creating a red room door can lead', 'off the map to an I AM ERROR room' }
     }
   )
   ModConfigMenu.AddSetting(
