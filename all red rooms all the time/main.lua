@@ -268,10 +268,10 @@ function mod:makeRedRoomsVisible()
       elseif roomType == RoomType.ROOM_SUPERSECRET then
         roomDesc.DisplayFlags = superSecretRoomDisplayFlags
       end
-      
-      level:UpdateVisibility()
     end
   end
+  
+  level:UpdateVisibility()
 end
 
 -- for whatever reason the game will create bad red room doors at the mirror & secret entrances, which breaks them
