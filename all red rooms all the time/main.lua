@@ -205,10 +205,36 @@ function mod:makeRedRoomsVisible()
   local visible = 1 << 0
   local icon = 1 << 2
   
-  -- there's also STATE_FULL_MAP_EFFECT
+  local normalRoomDisplayFlags = 0
+  local specialRoomDisplayFlags = 0
+  local secretRoomDisplayFlags = 0
+  local superSecretRoomDisplayFlags = 0
+  
   local hasCompass = level:GetStateFlag(LevelStateFlag.STATE_COMPASS_EFFECT)
   local hasMap = level:GetStateFlag(LevelStateFlag.STATE_MAP_EFFECT)
   local hasBlueMap = level:GetStateFlag(LevelStateFlag.STATE_BLUE_MAP_EFFECT)
+  local hasFullMap = level:GetStateFlag(LevelStateFlag.STATE_FULL_MAP_EFFECT)
+  
+  if hasCompass and hasMap then
+    normalRoomDisplayFlags = normalRoomDisplayFlags | visible | icon
+    specialRoomDisplayFlags = specialRoomDisplayFlags | visible | icon
+  elseif hasCompass then
+    specialRoomDisplayFlags = specialRoomDisplayFlags | visible | icon
+  elseif hasMap then
+    normalRoomDisplayFlags = normalRoomDisplayFlags | visible
+    specialRoomDisplayFlags = specialRoomDisplayFlags | visible
+  end
+  
+  if hasBlueMap then
+    secretRoomDisplayFlags = secretRoomDisplayFlags | icon
+    superSecretRoomDisplayFlags = superSecretRoomDisplayFlags | icon
+  end
+  
+  if hasFullMap then
+    normalRoomDisplayFlags = normalRoomDisplayFlags | visible | icon
+    specialRoomDisplayFlags = specialRoomDisplayFlags | visible | icon
+    secretRoomDisplayFlags = secretRoomDisplayFlags | icon
+  end
   
   for i = 0, #rooms - 1 do
     local room = rooms:Get(i)
@@ -217,48 +243,30 @@ function mod:makeRedRoomsVisible()
       local roomType = room.Data.Type
       local roomDesc = level:GetRoomByIdx(room.SafeGridIndex, -1) -- writeable
       
-      if hasMap and hasCompass then
-        if roomType ~= RoomType.ROOM_SECRET and
-           roomType ~= RoomType.ROOM_SUPERSECRET and
-           roomType ~= RoomType.ROOM_ULTRASECRET
-        then
-          roomDesc.DisplayFlags = visible | icon
-        end
-      elseif hasMap then
-        if roomType ~= RoomType.ROOM_SECRET and
-           roomType ~= RoomType.ROOM_SUPERSECRET and
-           roomType ~= RoomType.ROOM_ULTRASECRET
-        then
-          roomDesc.DisplayFlags = visible
-        end
-      elseif hasCompass then
-        if roomType == RoomType.ROOM_ANGEL or
-           roomType == RoomType.ROOM_ARCADE or
-           roomType == RoomType.ROOM_BARREN or
-           roomType == RoomType.ROOM_BOSS or
-           roomType == RoomType.ROOM_CHALLENGE or
-           roomType == RoomType.ROOM_CHEST or
-           roomType == RoomType.ROOM_CURSE or
-           roomType == RoomType.ROOM_DEVIL or
-           roomType == RoomType.ROOM_DICE or
-           roomType == RoomType.ROOM_ISAACS or
-           roomType == RoomType.ROOM_LIBRARY or
-           roomType == RoomType.ROOM_MINIBOSS or
-           roomType == RoomType.ROOM_PLANETARIUM or
-           roomType == RoomType.ROOM_SACRIFICE or
-           roomType == RoomType.ROOM_SHOP or
-           roomType == RoomType.ROOM_TREASURE
-        then
-          roomDesc.DisplayFlags = visible | icon
-        end
-      end
-      
-      if hasBlueMap then
-        if roomType == RoomType.ROOM_SECRET or
-           roomType == RoomType.ROOM_SUPERSECRET
-        then
-          roomDesc.DisplayFlags = icon
-        end
+      if roomType == RoomType.ROOM_DEFAULT then
+        roomDesc.DisplayFlags = normalRoomDisplayFlags
+      elseif roomType == RoomType.ROOM_ANGEL or
+             roomType == RoomType.ROOM_ARCADE or
+             roomType == RoomType.ROOM_BARREN or
+             roomType == RoomType.ROOM_BOSS or
+             roomType == RoomType.ROOM_CHALLENGE or
+             roomType == RoomType.ROOM_CHEST or
+             roomType == RoomType.ROOM_CURSE or
+             roomType == RoomType.ROOM_DEVIL or
+             roomType == RoomType.ROOM_DICE or
+             roomType == RoomType.ROOM_ISAACS or
+             roomType == RoomType.ROOM_LIBRARY or
+             roomType == RoomType.ROOM_MINIBOSS or
+             roomType == RoomType.ROOM_PLANETARIUM or
+             roomType == RoomType.ROOM_SACRIFICE or
+             roomType == RoomType.ROOM_SHOP or
+             roomType == RoomType.ROOM_TREASURE
+      then
+        roomDesc.DisplayFlags = specialRoomDisplayFlags
+      elseif roomType == RoomType.ROOM_SECRET then
+        roomDesc.DisplayFlags = secretRoomDisplayFlags
+      elseif roomType == RoomType.ROOM_SUPERSECRET then
+        roomDesc.DisplayFlags = superSecretRoomDisplayFlags
       end
       
       level:UpdateVisibility()
