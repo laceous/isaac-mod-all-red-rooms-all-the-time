@@ -518,6 +518,9 @@ end
 
 -- start ModConfigMenu --
 function mod:setupModConfigMenu()
+  for _, v in ipairs({ 'ARRATT' }) do
+    ModConfigMenu.RemoveSubcategory(v, mod.Name)
+  end
   ModConfigMenu.AddText('ARRATT', mod.Name, 'Choose where to enable this mod:')
   ModConfigMenu.AddSetting(
     'ARRATT',
