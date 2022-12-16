@@ -28,8 +28,12 @@ function mod:loadData()
   end
 end
 
-function mod:onGameExit()
+function mod:save()
   mod:SaveData(json.encode(mod.state))
+end
+
+function mod:onGameExit()
+  mod:save()
 end
 
 function mod:onNewLevel()
@@ -37,11 +41,7 @@ function mod:onNewLevel()
     return
   end
   
-  local shouldReloadFirstRoom = mod:makeAllRedRoomDoors()
-  mod:makeRedRoomsVisible()
-  if shouldReloadFirstRoom then
-    mod:reloadFirstRoom()
-  end
+  mod:doRedRoomLogic() -- dimension 0
   mod:closeErrorDoors()
 end
 
@@ -59,11 +59,7 @@ function mod:onNewRoom()
     end
     mod.playerPosition = nil
   elseif (currentDimension == 1 or currentDimension == 2) and mod:isNewDimension() then
-    local shouldReloadFirstRoom = mod:makeAllRedRoomDoors()
-    mod:makeRedRoomsVisible() -- sometimes red rooms won't be visible even if you have mapping, this generally happens when you switch dimensions
-    if shouldReloadFirstRoom then
-      mod:reloadFirstRoom()
-    end
+    mod:doRedRoomLogic()
   end
   
   mod:closeErrorDoors()
@@ -117,6 +113,14 @@ function mod:closeErrorDoors()
   end
 end
 
+function mod:doRedRoomLogic()
+  local shouldReloadFirstRoom = mod:makeAllRedRoomDoors()
+  mod:makeRedRoomsVisible() -- sometimes red rooms won't be visible even if you have mapping, this generally happens when you switch dimensions
+  if shouldReloadFirstRoom then
+    mod:reloadFirstRoom()
+  end
+end
+
 function mod:makeAllRedRoomDoors()
   local level = game:GetLevel()
   local stage = level:GetStage()
@@ -132,26 +136,28 @@ function mod:makeAllRedRoomDoors()
     -- mines escape sequence
     return false
   else
-    local illegalDoorSlots = mod:getIllegalDoorSlots()
+    local illegalRedRooms = mod:getIllegalRedRooms()
     
     for gridIdx = 0, 168 do -- full grid
-      mod:makeRedRoomDoors(gridIdx, illegalDoorSlots)
+      mod:makeRedRoomDoors(gridIdx, illegalRedRooms)
     end
-    mod:makeRedRoomDoors(0, illegalDoorSlots) -- otherwise I AM ERROR rooms might not be available from this room
+    mod:makeRedRoomDoors(0, illegalRedRooms) -- otherwise I AM ERROR rooms might not be available from this room
     
     return true
   end
 end
 
-function mod:makeRedRoomDoors(gridIdx, illegalDoorSlots)
+function mod:makeRedRoomDoors(gridIdx, illegalRedRooms)
   local level = game:GetLevel()
   local roomDesc = level:GetRoomByIdx(gridIdx, -1)
+  local roomType = nil
   local safeGridIdx
   local shape
   
   if roomDesc.GridIndex >= 0 then
     gridIdx = roomDesc.GridIndex
     safeGridIdx = roomDesc.SafeGridIndex
+    roomType = roomDesc.Data.Type
     shape = roomDesc.Data.Shape
   else
     safeGridIdx = gridIdx
@@ -175,20 +181,10 @@ function mod:makeRedRoomDoors(gridIdx, illegalDoorSlots)
   end
   
   for _, doorSlot in ipairs(doorSlots) do
-    if not mod:isIllegalDoorSlot(gridIdx, doorSlot, illegalDoorSlots) then
+    if not mod:wouldMakeIllegalRedRoom(gridIdx, roomType, shape, doorSlot, illegalRedRooms) then
       level:MakeRedRoomDoor(safeGridIdx, doorSlot)
     end
   end
-end
-
-function mod:isIllegalDoorSlot(gridIdx, doorSlot, illegalDoorSlots)
-  for _, illegal in ipairs(illegalDoorSlots) do
-    if illegal.gridIdx == gridIdx and illegal.doorSlot == doorSlot then
-      return true
-    end
-  end
-  
-  return false
 end
 
 function mod:makeRedRoomsVisible()
@@ -274,129 +270,99 @@ function mod:makeRedRoomsVisible()
   level:UpdateVisibility()
 end
 
--- for whatever reason the game will create bad red room doors at the mirror & secret entrances, which breaks them
--- also filter boss rooms so we don't remove any slots that might be needed for angel/devil rooms
-function mod:getIllegalDoorSlots()
+-- pay attention to allowed door slots
+function mod:getIllegalRedRooms()
   local level = game:GetLevel()
   local rooms = level:GetRooms()
-  local stage = level:GetStage()
-  local stageType = level:GetStageType()
   local currentDimension = mod:getCurrentDimension()
+  
+  local left = -1
+  local right = 1
+  local up = -13
+  local down = 13
   
   local illegal = {}
   
   for i = 0, #rooms - 1 do
     local room = rooms:Get(i)
-    local roomType = room.Data.Type
     local roomShape = room.Data.Shape
+    local roomDoors = room.Data.Doors
+    local roomGridIdx = room.GridIndex
     local roomDimension = mod:getDimension(room)
     
-    if room.GridIndex >= 0 and currentDimension == roomDimension then
-      if (stage == LevelStage.STAGE1_2 or (mod:isCurseOfTheLabyrinth() and stage == LevelStage.STAGE1_1)) and (stageType == StageType.STAGETYPE_REPENTANCE or stageType == StageType.STAGETYPE_REPENTANCE_B) and
-         (roomDimension == 0 or roomDimension == 1) and room.Data.Name == 'Mirror Room'
-      then
-        if room.Data.Variant == 10000 then -- mirror on right
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
-          if not mod:isAgainstRightEdge(room.GridIndex) then
-            table.insert(illegal, { gridIdx = room.GridIndex + 1, doorSlot = DoorSlot.LEFT0 })
-          end
-        elseif room.Data.Variant == 10001 then -- mirror on left
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
-          if not mod:isAgainstLeftEdge(room.GridIndex) then
-            table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
-          end
-        end
-      elseif (stage == LevelStage.STAGE2_2 or (mod:isCurseOfTheLabyrinth() and stage == LevelStage.STAGE2_1)) and (stageType == StageType.STAGETYPE_REPENTANCE or stageType == StageType.STAGETYPE_REPENTANCE_B) and
-             roomDimension == 0 and room.Data.Name == 'Secret Entrance'
-      then
-        table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 }) -- mines entrance is up
-        if not mod:isAgainstTopEdge(room.GridIndex) then
-          table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
-        end
-      elseif roomType == RoomType.ROOM_BOSS and stage ~= LevelStage.STAGE7 and roomDimension == 0 then -- don't need to filter boss rooms in the void or mirror dimension
-        if roomShape == RoomShape.ROOMSHAPE_1x1 or roomShape == RoomShape.ROOMSHAPE_IH or roomShape == RoomShape.ROOMSHAPE_IV then
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN0 })
-          if not mod:isAgainstLeftEdge(room.GridIndex) then
-            table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
-          end
-          if not mod:isAgainstTopEdge(room.GridIndex) then
-            table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
-          end
-          if not mod:isAgainstRightEdge(room.GridIndex) then
-            table.insert(illegal, { gridIdx = room.GridIndex + 1, doorSlot = DoorSlot.LEFT0 })
-          end
-          if not mod:isAgainstBottomEdge(room.GridIndex) then
-            table.insert(illegal, { gridIdx = room.GridIndex + 13, doorSlot = DoorSlot.UP0 })
-          end
-        elseif roomShape == RoomShape.ROOMSHAPE_1x2 then
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN0 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT1 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT1 })
-          if not mod:isAgainstLeftEdge(room.GridIndex) then
-            table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
-            table.insert(illegal, { gridIdx = room.GridIndex + 13 - 1, doorSlot = DoorSlot.RIGHT0 })
-          end
-          if not mod:isAgainstTopEdge(room.GridIndex) then
-            table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
-          end
-          if not mod:isAgainstRightEdge(room.GridIndex) then
-            table.insert(illegal, { gridIdx = room.GridIndex + 1, doorSlot = DoorSlot.LEFT0 })
-            table.insert(illegal, { gridIdx = room.GridIndex + 13 + 1, doorSlot = DoorSlot.LEFT0 })
-          end
-          if not mod:isAgainstBottomEdge(room.GridIndex + 13) then
-            table.insert(illegal, { gridIdx = room.GridIndex + 13 + 13, doorSlot = DoorSlot.UP0 })
-          end
-        elseif roomShape == RoomShape.ROOMSHAPE_2x1 then
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN0 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP1 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN1 })
-          if not mod:isAgainstLeftEdge(room.GridIndex) then
-            table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
-          end
-          if not mod:isAgainstTopEdge(room.GridIndex) then
-            table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
-            table.insert(illegal, { gridIdx = room.GridIndex - 13 + 1, doorSlot = DoorSlot.DOWN0 })
-          end
-          if not mod:isAgainstRightEdge(room.GridIndex + 1) then
-            table.insert(illegal, { gridIdx = room.GridIndex + 1 + 1, doorSlot = DoorSlot.LEFT0 })
-          end
-          if not mod:isAgainstBottomEdge(room.GridIndex) then
-            table.insert(illegal, { gridIdx = room.GridIndex + 13, doorSlot = DoorSlot.UP0 })
-            table.insert(illegal, { gridIdx = room.GridIndex + 13 + 1, doorSlot = DoorSlot.UP0 })
-          end
-        elseif roomShape == RoomShape.ROOMSHAPE_2x2 then
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT0 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP0 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT0 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN0 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.LEFT1 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.UP1 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.RIGHT1 })
-          table.insert(illegal, { gridIdx = room.GridIndex, doorSlot = DoorSlot.DOWN1 })
-          if not mod:isAgainstLeftEdge(room.GridIndex) then
-            table.insert(illegal, { gridIdx = room.GridIndex - 1, doorSlot = DoorSlot.RIGHT0 })
-            table.insert(illegal, { gridIdx = room.GridIndex + 13 - 1, doorSlot = DoorSlot.RIGHT0 })
-          end
-          if not mod:isAgainstTopEdge(room.GridIndex) then
-            table.insert(illegal, { gridIdx = room.GridIndex - 13, doorSlot = DoorSlot.DOWN0 })
-            table.insert(illegal, { gridIdx = room.GridIndex - 13 + 1, doorSlot = DoorSlot.DOWN0 })
-          end
-          if not mod:isAgainstRightEdge(room.GridIndex + 1) then
-            table.insert(illegal, { gridIdx = room.GridIndex + 1 + 1, doorSlot = DoorSlot.LEFT0 })
-            table.insert(illegal, { gridIdx = room.GridIndex + 13 + 1 + 1, doorSlot = DoorSlot.LEFT0 })
-          end
-          if not mod:isAgainstBottomEdge(room.GridIndex + 13) then
-            table.insert(illegal, { gridIdx = room.GridIndex + 13 + 13, doorSlot = DoorSlot.UP0 })
-            table.insert(illegal, { gridIdx = room.GridIndex + 13 + 13 + 1, doorSlot = DoorSlot.UP0 })
+    if roomGridIdx >= 0 and roomDimension == currentDimension then
+      local tbl = {}
+      
+      if roomShape == RoomShape.ROOMSHAPE_1x1 or roomShape == RoomShape.ROOMSHAPE_IH or roomShape == RoomShape.ROOMSHAPE_IV then
+        table.insert(tbl, { condition = not mod:isAgainstLeftEdge(roomGridIdx)   and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.LEFT0) , index = roomGridIdx + left })
+        table.insert(tbl, { condition = not mod:isAgainstTopEdge(roomGridIdx)    and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.UP0)   , index = roomGridIdx + up })
+        table.insert(tbl, { condition = not mod:isAgainstRightEdge(roomGridIdx)  and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.RIGHT0), index = roomGridIdx + right })
+        table.insert(tbl, { condition = not mod:isAgainstBottomEdge(roomGridIdx) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.DOWN0) , index = roomGridIdx + down })
+      elseif roomShape == RoomShape.ROOMSHAPE_1x2 or roomShape == RoomShape.ROOMSHAPE_IIV then
+        table.insert(tbl, { condition = not mod:isAgainstLeftEdge(roomGridIdx)          and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.LEFT0) , index = roomGridIdx + left })
+        table.insert(tbl, { condition = not mod:isAgainstTopEdge(roomGridIdx)           and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.UP0)   , index = roomGridIdx + up })
+        table.insert(tbl, { condition = not mod:isAgainstRightEdge(roomGridIdx)         and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.RIGHT0), index = roomGridIdx + right })
+        table.insert(tbl, { condition = not mod:isAgainstBottomEdge(roomGridIdx + down) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.DOWN0) , index = roomGridIdx + down + down })
+        table.insert(tbl, { condition = not mod:isAgainstLeftEdge(roomGridIdx)          and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.LEFT1) , index = roomGridIdx + down + left })
+        table.insert(tbl, { condition = not mod:isAgainstRightEdge(roomGridIdx)         and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.RIGHT1), index = roomGridIdx + down + right })
+      elseif roomShape == RoomShape.ROOMSHAPE_2x1 or roomShape == RoomShape.ROOMSHAPE_IIH then
+        table.insert(tbl, { condition = not mod:isAgainstLeftEdge(roomGridIdx)          and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.LEFT0) , index = roomGridIdx + left })
+        table.insert(tbl, { condition = not mod:isAgainstTopEdge(roomGridIdx)           and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.UP0)   , index = roomGridIdx + up })
+        table.insert(tbl, { condition = not mod:isAgainstRightEdge(roomGridIdx + right) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.RIGHT0), index = roomGridIdx + right + right })
+        table.insert(tbl, { condition = not mod:isAgainstBottomEdge(roomGridIdx)        and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.DOWN0) , index = roomGridIdx + down })
+        table.insert(tbl, { condition = not mod:isAgainstTopEdge(roomGridIdx)           and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.UP1)   , index = roomGridIdx + up + right })
+        table.insert(tbl, { condition = not mod:isAgainstBottomEdge(roomGridIdx)        and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.DOWN1) , index = roomGridIdx + down + right })
+      elseif roomShape == RoomShape.ROOMSHAPE_2x2 then
+        table.insert(tbl, { condition = not mod:isAgainstLeftEdge(roomGridIdx)          and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.LEFT0) , index = roomGridIdx + left })
+        table.insert(tbl, { condition = not mod:isAgainstTopEdge(roomGridIdx)           and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.UP0)   , index = roomGridIdx + up })
+        table.insert(tbl, { condition = not mod:isAgainstRightEdge(roomGridIdx + right) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.RIGHT0), index = roomGridIdx + right + right })
+        table.insert(tbl, { condition = not mod:isAgainstBottomEdge(roomGridIdx + down) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.DOWN0) , index = roomGridIdx + down + down })
+        table.insert(tbl, { condition = not mod:isAgainstLeftEdge(roomGridIdx)          and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.LEFT1) , index = roomGridIdx + down + left })
+        table.insert(tbl, { condition = not mod:isAgainstTopEdge(roomGridIdx)           and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.UP1)   , index = roomGridIdx + up + right })
+        table.insert(tbl, { condition = not mod:isAgainstRightEdge(roomGridIdx + right) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.RIGHT1), index = roomGridIdx + down + right + right })
+        table.insert(tbl, { condition = not mod:isAgainstBottomEdge(roomGridIdx + down) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.DOWN1) , index = roomGridIdx + down + down + right })
+      elseif roomShape == RoomShape.ROOMSHAPE_LTL then
+        table.insert(tbl, { condition = not mod:isAgainstLeftEdge(roomGridIdx)          and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.LEFT0) , index = roomGridIdx })
+        table.insert(tbl, { condition = not mod:isAgainstTopEdge(roomGridIdx)           and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.UP0)   , index = roomGridIdx })
+        table.insert(tbl, { condition = not mod:isAgainstRightEdge(roomGridIdx + right) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.RIGHT0), index = roomGridIdx + right + right })
+        table.insert(tbl, { condition = not mod:isAgainstBottomEdge(roomGridIdx + down) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.DOWN0) , index = roomGridIdx + down + down })
+        table.insert(tbl, { condition = not mod:isAgainstLeftEdge(roomGridIdx)          and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.LEFT1) , index = roomGridIdx + down + left })
+        table.insert(tbl, { condition = not mod:isAgainstTopEdge(roomGridIdx)           and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.UP1)   , index = roomGridIdx + up + right })
+        table.insert(tbl, { condition = not mod:isAgainstRightEdge(roomGridIdx + right) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.RIGHT1), index = roomGridIdx + down + right + right })
+        table.insert(tbl, { condition = not mod:isAgainstBottomEdge(roomGridIdx + down) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.DOWN1) , index = roomGridIdx + down + down + right })
+      elseif roomShape == RoomShape.ROOMSHAPE_LTR then
+        table.insert(tbl, { condition = not mod:isAgainstLeftEdge(roomGridIdx)          and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.LEFT0) , index = roomGridIdx + left })
+        table.insert(tbl, { condition = not mod:isAgainstTopEdge(roomGridIdx)           and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.UP0)   , index = roomGridIdx + up })
+        table.insert(tbl, { condition = not mod:isAgainstRightEdge(roomGridIdx + right) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.RIGHT0), index = roomGridIdx + right })
+        table.insert(tbl, { condition = not mod:isAgainstBottomEdge(roomGridIdx + down) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.DOWN0) , index = roomGridIdx + down + down })
+        table.insert(tbl, { condition = not mod:isAgainstLeftEdge(roomGridIdx)          and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.LEFT1) , index = roomGridIdx + down + left })
+        table.insert(tbl, { condition = not mod:isAgainstTopEdge(roomGridIdx)           and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.UP1)   , index = roomGridIdx + right })
+        table.insert(tbl, { condition = not mod:isAgainstRightEdge(roomGridIdx + right) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.RIGHT1), index = roomGridIdx + down + right + right })
+        table.insert(tbl, { condition = not mod:isAgainstBottomEdge(roomGridIdx + down) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.DOWN1) , index = roomGridIdx + down + down + right })
+      elseif roomShape == RoomShape.ROOMSHAPE_LBL then
+        table.insert(tbl, { condition = not mod:isAgainstLeftEdge(roomGridIdx)          and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.LEFT0) , index = roomGridIdx + left })
+        table.insert(tbl, { condition = not mod:isAgainstTopEdge(roomGridIdx)           and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.UP0)   , index = roomGridIdx + up })
+        table.insert(tbl, { condition = not mod:isAgainstRightEdge(roomGridIdx + right) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.RIGHT0), index = roomGridIdx + right + right })
+        table.insert(tbl, { condition = not mod:isAgainstBottomEdge(roomGridIdx + down) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.DOWN0) , index = roomGridIdx + down })
+        table.insert(tbl, { condition = not mod:isAgainstLeftEdge(roomGridIdx)          and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.LEFT1) , index = roomGridIdx + down })
+        table.insert(tbl, { condition = not mod:isAgainstTopEdge(roomGridIdx)           and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.UP1)   , index = roomGridIdx + up + right })
+        table.insert(tbl, { condition = not mod:isAgainstRightEdge(roomGridIdx + right) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.RIGHT1), index = roomGridIdx + down + right + right })
+        table.insert(tbl, { condition = not mod:isAgainstBottomEdge(roomGridIdx + down) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.DOWN1) , index = roomGridIdx + down + down + right })
+      elseif roomShape == RoomShape.ROOMSHAPE_LBR then
+        table.insert(tbl, { condition = not mod:isAgainstLeftEdge(roomGridIdx)          and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.LEFT0) , index = roomGridIdx + left })
+        table.insert(tbl, { condition = not mod:isAgainstTopEdge(roomGridIdx)           and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.UP0)   , index = roomGridIdx + up })
+        table.insert(tbl, { condition = not mod:isAgainstRightEdge(roomGridIdx + right) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.RIGHT0), index = roomGridIdx + right + right })
+        table.insert(tbl, { condition = not mod:isAgainstBottomEdge(roomGridIdx + down) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.DOWN0) , index = roomGridIdx + down + down })
+        table.insert(tbl, { condition = not mod:isAgainstLeftEdge(roomGridIdx)          and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.LEFT1) , index = roomGridIdx + down + left })
+        table.insert(tbl, { condition = not mod:isAgainstTopEdge(roomGridIdx)           and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.UP1)   , index = roomGridIdx + up + right })
+        table.insert(tbl, { condition = not mod:isAgainstRightEdge(roomGridIdx + right) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.RIGHT1), index = roomGridIdx + down + right })
+        table.insert(tbl, { condition = not mod:isAgainstBottomEdge(roomGridIdx + down) and not mod:isDoorSlotAllowed(roomDoors, DoorSlot.DOWN1) , index = roomGridIdx + down + right })
+      end
+      
+      for _, v in ipairs(tbl) do
+        if v.condition then
+          if not mod:tableHasValue(illegal, v.index) and level:GetRoomByIdx(v.index, -1).GridIndex < 0 then
+            table.insert(illegal, v.index)
           end
         end
       end
@@ -404,6 +370,157 @@ function mod:getIllegalDoorSlots()
   end
   
   return illegal
+end
+
+function mod:wouldMakeIllegalRedRoom(roomGridIdx, roomType, roomShape, doorSlot, illegalRedRooms)
+  local left = -1
+  local right = 1
+  local up = -13
+  local down = 13
+  
+  -- the game normally protects around boss rooms unless you're up against the edge of the map
+  if roomType == RoomType.ROOM_BOSS then
+    if roomShape == RoomShape.ROOMSHAPE_1x1 or roomShape == RoomShape.ROOMSHAPE_IH or roomShape == RoomShape.ROOMSHAPE_IV then
+      if (doorSlot == DoorSlot.LEFT0  and mod:isAgainstLeftEdge(roomGridIdx))  or
+         (doorSlot == DoorSlot.UP0    and mod:isAgainstTopEdge(roomGridIdx))   or
+         (doorSlot == DoorSlot.RIGHT0 and mod:isAgainstRightEdge(roomGridIdx)) or
+         (doorSlot == DoorSlot.DOWN0  and mod:isAgainstBottomEdge(roomGridIdx))
+      then
+        return true
+      end
+    elseif roomShape == RoomShape.ROOMSHAPE_1x2 or roomShape == RoomShape.ROOMSHAPE_IIV then
+      if (doorSlot == DoorSlot.LEFT0  and mod:isAgainstLeftEdge(roomGridIdx))          or
+         (doorSlot == DoorSlot.UP0    and mod:isAgainstTopEdge(roomGridIdx))           or
+         (doorSlot == DoorSlot.RIGHT0 and mod:isAgainstRightEdge(roomGridIdx))         or
+         (doorSlot == DoorSlot.DOWN0  and mod:isAgainstBottomEdge(roomGridIdx + down)) or
+         (doorSlot == DoorSlot.LEFT1  and mod:isAgainstLeftEdge(roomGridIdx))          or
+         (doorSlot == DoorSlot.RIGHT1 and mod:isAgainstRightEdge(roomGridIdx))
+      then
+        return true
+      end
+    elseif roomShape == RoomShape.ROOMSHAPE_2x1 or roomShape == RoomShape.ROOMSHAPE_IIH then
+      if (doorSlot == DoorSlot.LEFT0  and mod:isAgainstLeftEdge(roomGridIdx))          or
+         (doorSlot == DoorSlot.UP0    and mod:isAgainstTopEdge(roomGridIdx))           or
+         (doorSlot == DoorSlot.RIGHT0 and mod:isAgainstRightEdge(roomGridIdx + right)) or
+         (doorSlot == DoorSlot.DOWN0  and mod:isAgainstBottomEdge(roomGridIdx))        or
+         (doorSlot == DoorSlot.UP1    and mod:isAgainstTopEdge(roomGridIdx))           or
+         (doorSlot == DoorSlot.DOWN1  and mod:isAgainstBottomEdge(roomGridIdx))
+      then
+        return true
+      end
+    elseif roomShape == RoomShape.ROOMSHAPE_2x2 then -- there's no L shaped boss rooms
+      if (doorSlot == DoorSlot.LEFT0  and mod:isAgainstLeftEdge(roomGridIdx))          or
+         (doorSlot == DoorSlot.UP0    and mod:isAgainstTopEdge(roomGridIdx))           or
+         (doorSlot == DoorSlot.RIGHT0 and mod:isAgainstRightEdge(roomGridIdx + right)) or
+         (doorSlot == DoorSlot.DOWN0  and mod:isAgainstBottomEdge(roomGridIdx + down)) or
+         (doorSlot == DoorSlot.LEFT1  and mod:isAgainstLeftEdge(roomGridIdx))          or
+         (doorSlot == DoorSlot.UP1    and mod:isAgainstTopEdge(roomGridIdx))           or
+         (doorSlot == DoorSlot.RIGHT1 and mod:isAgainstRightEdge(roomGridIdx + right)) or
+         (doorSlot == DoorSlot.DOWN1  and mod:isAgainstBottomEdge(roomGridIdx + down))
+      then
+        return true
+      end
+    end
+  end
+  
+  local calculated = -1
+  
+  if roomShape == RoomShape.ROOMSHAPE_1x1 or roomShape == RoomShape.ROOMSHAPE_IH or roomShape == RoomShape.ROOMSHAPE_IV then
+    if doorSlot == DoorSlot.LEFT0 and not mod:isAgainstLeftEdge(roomGridIdx) then
+      calculated = roomGridIdx + left
+    elseif doorSlot == DoorSlot.UP0 and not mod:isAgainstTopEdge(roomGridIdx) then
+      calculated = roomGridIdx + up
+    elseif doorSlot == DoorSlot.RIGHT0 and not mod:isAgainstRightEdge(roomGridIdx) then
+      calculated = roomGridIdx + right
+    elseif doorSlot == DoorSlot.DOWN0 and not mod:isAgainstBottomEdge(roomGridIdx) then
+      calculated = roomGridIdx + down
+    end
+  elseif roomShape == RoomShape.ROOMSHAPE_1x2 or roomShape == RoomShape.ROOMSHAPE_IIV then
+    if doorSlot == DoorSlot.LEFT0 and not mod:isAgainstLeftEdge(roomGridIdx) then
+      calculated = roomGridIdx + left
+    elseif doorSlot == DoorSlot.UP0 and not mod:isAgainstTopEdge(roomGridIdx) then
+      calculated = roomGridIdx + up
+    elseif doorSlot == DoorSlot.RIGHT0 and not mod:isAgainstRightEdge(roomGridIdx) then
+      calculated = roomGridIdx + right
+    elseif doorSlot == DoorSlot.DOWN0 and not mod:isAgainstBottomEdge(roomGridIdx + down) then
+      calculated = roomGridIdx + down + down
+    elseif doorSlot == DoorSlot.LEFT1 and not mod:isAgainstLeftEdge(roomGridIdx) then
+      calculated = roomGridIdx + down + left
+    elseif doorSlot == DoorSlot.RIGHT1 and not mod:isAgainstRightEdge(roomGridIdx) then
+      calculated = roomGridIdx + down + right
+    end
+  elseif roomShape == RoomShape.ROOMSHAPE_2x1 or roomShape == RoomShape.ROOMSHAPE_IIH then
+    if doorSlot == DoorSlot.LEFT0 and not mod:isAgainstLeftEdge(roomGridIdx) then
+      calculated = roomGridIdx + left
+    elseif doorSlot == DoorSlot.UP0 and not mod:isAgainstTopEdge(roomGridIdx) then
+      calculated = roomGridIdx + up
+    elseif doorSlot == DoorSlot.RIGHT0 and not mod:isAgainstRightEdge(roomGridIdx + right) then
+      calculated = roomGridIdx + right + right
+    elseif doorSlot == DoorSlot.DOWN0 and not mod:isAgainstBottomEdge(roomGridIdx) then
+      calculated = roomGridIdx + down
+    elseif doorSlot == DoorSlot.UP1 and not mod:isAgainstTopEdge(roomGridIdx) then
+      calculated = roomGridIdx + up + right
+    elseif doorSlot == DoorSlot.DOWN1 and not mod:isAgainstBottomEdge(roomGridIdx) then
+      calculated = roomGridIdx + down + right
+    end
+  elseif roomShape == RoomShape.ROOMSHAPE_2x2 or roomShape == RoomShape.ROOMSHAPE_LTL or roomShape == RoomShape.ROOMSHAPE_LTR or roomShape == RoomShape.ROOMSHAPE_LBL or roomShape == RoomShape.ROOMSHAPE_LBR then
+    if doorSlot == DoorSlot.LEFT0 and not mod:isAgainstLeftEdge(roomGridIdx) then
+      calculated = roomGridIdx + left
+    elseif doorSlot == DoorSlot.UP0 and not mod:isAgainstTopEdge(roomGridIdx) then
+      calculated = roomGridIdx + up
+    elseif doorSlot == DoorSlot.RIGHT0 and not mod:isAgainstRightEdge(roomGridIdx + right) then
+      calculated = roomGridIdx + right + right
+    elseif doorSlot == DoorSlot.DOWN0 and not mod:isAgainstBottomEdge(roomGridIdx + down) then
+      calculated = roomGridIdx + down + down
+    elseif doorSlot == DoorSlot.LEFT1 and not mod:isAgainstLeftEdge(roomGridIdx) then
+      calculated = roomGridIdx + down + left
+    elseif doorSlot == DoorSlot.UP1 and not mod:isAgainstTopEdge(roomGridIdx) then
+      calculated = roomGridIdx + up + right
+    elseif doorSlot == DoorSlot.RIGHT1 and not mod:isAgainstRightEdge(roomGridIdx + right) then
+      calculated = roomGridIdx + down + right + right
+    elseif doorSlot == DoorSlot.DOWN1 and not mod:isAgainstBottomEdge(roomGridIdx + down) then
+      calculated = roomGridIdx + down + down + right
+    end
+    
+    if roomShape == RoomShape.ROOMSHAPE_LTL then
+      if (doorSlot == DoorSlot.LEFT0 and not mod:isAgainstLeftEdge(roomGridIdx)) or
+         (doorSlot == DoorSlot.UP0   and not mod:isAgainstTopEdge(roomGridIdx))
+      then
+        calculated = roomGridIdx
+      end
+    elseif roomShape == RoomShape.ROOMSHAPE_LTR then
+      if (doorSlot == DoorSlot.RIGHT0 and not mod:isAgainstRightEdge(roomGridIdx + right)) or
+         (doorSlot == DoorSlot.UP1    and not mod:isAgainstTopEdge(roomGridIdx))
+      then
+        calculated = roomGridIdx + right
+      end
+    elseif roomShape == RoomShape.ROOMSHAPE_LBL then
+      if (doorSlot == DoorSlot.DOWN0 and not mod:isAgainstBottomEdge(roomGridIdx + down)) or
+         (doorSlot == DoorSlot.LEFT1 and not mod:isAgainstLeftEdge(roomGridIdx))
+      then
+        calculated = roomGridIdx + down
+      end
+    elseif roomShape == RoomShape.ROOMSHAPE_LBR then
+      if (doorSlot == DoorSlot.RIGHT1 and not mod:isAgainstRightEdge(roomGridIdx + right)) or
+         (doorSlot == DoorSlot.DOWN1 and not mod:isAgainstBottomEdge(roomGridIdx + down))
+      then
+        calculated = roomGridIdx + down + right
+      end
+    end
+  end
+  
+  for _, illegal in ipairs(illegalRedRooms) do
+    if calculated == illegal then
+      return true
+    end
+  end
+  
+  return false
+end
+
+function mod:isDoorSlotAllowed(doors, doorSlot)
+  local val = 1 << doorSlot
+  return doors & val == val
 end
 
 function mod:isAgainstLeftEdge(gridIdx)
@@ -516,6 +633,16 @@ function mod:getEnabledOptionsIndex(option)
   return -1
 end
 
+function mod:tableHasValue(tbl, val)
+  for _, v in ipairs(tbl) do
+    if v == val then
+      return true
+    end
+  end
+  
+  return false
+end
+
 -- start ModConfigMenu --
 function mod:setupModConfigMenu()
   for _, v in ipairs({ 'ARRATT' }) do
@@ -537,6 +664,7 @@ function mod:setupModConfigMenu()
       end,
       OnChange = function(n)
         mod.state.enabledOption = mod.enabledOptions[n]
+        mod:save()
       end,
       Info = { 'Red rooms are only created at the', 'start of a new level or dimension' }
     }
@@ -555,6 +683,7 @@ function mod:setupModConfigMenu()
       end,
       OnChange = function(b)
         mod.state.closeErrorDoors = b
+        mod:save()
       end,
       Info = { 'Creating a red room door can lead', 'off the map to an I AM ERROR room' }
     }
@@ -572,8 +701,9 @@ function mod:setupModConfigMenu()
       end,
       OnChange = function(b)
         mod.state.reloadFirstRoom = b
+        mod:save()
       end,
-      Info = { 'Yes: reload first room to fix transient issues', 'No: set this if you\'re trying to play true co-op' }
+      Info = { 'Yes: reload first room to fix transient issues', 'No: set this if you\'re trying to play true co-op', 'This applies to all first rooms in all levels' }
     }
   )
 end

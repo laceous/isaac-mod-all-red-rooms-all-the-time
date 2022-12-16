@@ -13,10 +13,10 @@ Red rooms will not be created in the following locations:
     [*]Home: Red rooms are only available as closets that don't connect to each other. The default red room closet will be created.
 [/list]
 
-By default, any red room doors that lead to I AM ERROR rooms will automatically close. This can be toggled via Mod Config Menu. These can show up at the edge of the map or elsewhere.
+By default, any red room doors that lead to I AM ERROR rooms will automatically close. This can be toggled via Mod Config Menu.
 
 Sometimes red room doors in the first room don't show up correctly. By default, the first room is reloaded to work around this issue. This can break true co-op so it can be toggled via Mod Config Menu.</description>
-    <version>1.8</version>
+    <version>1.9</version>
     <visibility>Public</visibility>
     <tag id="Lua"/>
     <tag id="Rooms"/>
