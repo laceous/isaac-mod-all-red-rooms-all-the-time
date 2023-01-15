@@ -2,7 +2,6 @@ local mod = RegisterMod('All Red Rooms All The Time', 1)
 local json = require('json')
 local game = Game()
 
-mod.playerPosition = nil
 mod.enabledOptions = { 'disabled', 'normal + hard', 'normal + hard + challenges' }
 
 mod.state = {}
@@ -52,13 +51,7 @@ function mod:onNewRoom()
   
   local currentDimension = mod:getCurrentDimension()
   
-  if mod.playerPosition then
-    for i = 0, game:GetNumPlayers() - 1 do
-      local player = game:GetPlayer(i)
-      player.Position = Vector(mod.playerPosition.X, mod.playerPosition.Y)
-    end
-    mod.playerPosition = nil
-  elseif (currentDimension == 1 or currentDimension == 2) and mod:isNewDimension() then
+  if (currentDimension == 1 or currentDimension == 2) and mod:isNewDimension() then
     mod:doRedRoomLogic()
   end
   
@@ -82,9 +75,6 @@ end
 function mod:reloadFirstRoom()
   if mod.state.reloadFirstRoom then
     local level = game:GetLevel()
-    
-    local player = game:GetPlayer(0)
-    mod.playerPosition = Vector(player.Position.X, player.Position.Y)
     
     level.LeaveDoor = DoorSlot.NO_DOOR_SLOT
     game:ChangeRoom(level:GetCurrentRoomIndex(), -1)
