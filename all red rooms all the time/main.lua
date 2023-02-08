@@ -3,13 +3,22 @@ local json = require('json')
 local game = Game()
 
 mod.enabledOptions = { 'disabled', 'normal + hard', 'normal + hard + challenges' }
+mod.hasDataLoaded = false
 
 mod.state = {}
 mod.state.enabledOption = 'normal + hard'
 mod.state.closeErrorDoors = true
 mod.state.reloadFirstRoom = true
 
+function mod:onGameStart()
+  mod:loadData()
+end
+
 function mod:loadData()
+  if mod.hasDataLoaded then
+    return
+  end
+  
   if mod:HasData() then
     local _, state = pcall(json.decode, mod:LoadData())
     
@@ -25,6 +34,8 @@ function mod:loadData()
       end
     end
   end
+  
+  mod.hasDataLoaded = true
 end
 
 function mod:save()
@@ -33,6 +44,7 @@ end
 
 function mod:onGameExit()
   mod:save()
+  mod.hasDataLoaded = false
 end
 
 function mod:onNewLevel()
@@ -67,6 +79,7 @@ function mod:onUpdate()
 end
 
 function mod:isDisabled()
+  mod:loadData()
   return mod.state.enabledOption == 'disabled' or
          (Isaac.GetChallenge() ~= Challenge.CHALLENGE_NULL and mod.state.enabledOption ~= 'normal + hard + challenges') or
          game:IsGreedMode()
@@ -699,7 +712,7 @@ function mod:setupModConfigMenu()
 end
 -- end ModConfigMenu --
 
-mod:loadData()
+mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, mod.onGameStart)
 mod:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, mod.onGameExit)
 mod:AddCallback(ModCallbacks.MC_POST_NEW_LEVEL, mod.onNewLevel)
 mod:AddCallback(ModCallbacks.MC_POST_NEW_ROOM, mod.onNewRoom)
