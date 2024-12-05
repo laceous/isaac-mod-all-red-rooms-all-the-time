@@ -120,8 +120,16 @@ function mod:reloadFirstRoom()
   if mod.state.reloadFirstRoom then
     local level = game:GetLevel()
     
+    -- fix card reading
+    -- subtypes: 0 = treasure, 1 = boss, 2 = secret
+    local portals = Isaac.FindByType(EntityType.ENTITY_EFFECT, EffectVariant.PORTAL_TELEPORT, -1, false, false)
+    
     level.LeaveDoor = DoorSlot.NO_DOOR_SLOT
     game:ChangeRoom(level:GetCurrentRoomIndex(), -1)
+    
+    for _, v in ipairs(portals) do
+      game:Spawn(v.Type, v.Variant, v.Position, v.Velocity, nil, v.SubType, v.InitSeed) -- v.SpawnerEntity
+    end
   end
 end
 
