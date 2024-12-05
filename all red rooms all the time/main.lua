@@ -4,11 +4,35 @@ local game = Game()
 
 mod.enabledOptions = { 'disabled', 'normal + hard', 'normal + hard + challenges' }
 mod.hasDataLoaded = false
+mod.rng = RNG()
+mod.rngShiftIdx = 35
 
 mod.state = {}
 mod.state.enabledOption = 'normal + hard'
 mod.state.closeErrorDoors = true
 mod.state.reloadFirstRoom = true
+mod.state.perDimensionRng = false
+mod.state.overrides = {
+  normal = 0,
+  normalMult = 0,
+  normalMult2 = 0,
+  angel = 0,
+  arcade = 0,
+  bedroomClean = 0,
+  bedroomDirty = 0,
+  curse = 0,
+  devil = 0,
+  dice = 0,
+  library = 0,
+  miniBoss = 0,
+  planetarium = 0,
+  sacrifice = 0,
+  secret = 0,
+  shop = 0,
+  superSecret = 0,
+  treasure = 0,
+  vault = 0,
+}
 
 function mod:onGameStart()
   mod:loadData()
@@ -26,11 +50,17 @@ function mod:loadData()
       if type(state.enabledOption) == 'string' and mod:getEnabledOptionsIndex(state.enabledOption) >= 1 then
         mod.state.enabledOption = state.enabledOption
       end
-      if type(state.closeErrorDoors) == 'boolean' then
-        mod.state.closeErrorDoors = state.closeErrorDoors
+      for _, v in ipairs({ 'closeErrorDoors', 'reloadFirstRoom', 'perDimensionRng' }) do
+        if type(state[v]) == 'boolean' then
+          mod.state[v] = state[v]
+        end
       end
-      if type(state.reloadFirstRoom) == 'boolean' then
-        mod.state.reloadFirstRoom = state.reloadFirstRoom
+      if type(state.overrides) == 'table' then
+        for _, v in ipairs({ 'normal', 'normalMult', 'normalMult2', 'angel', 'arcade', 'bedroomClean', 'bedroomDirty', 'curse', 'devil', 'dice', 'library', 'miniBoss', 'planetarium', 'sacrifice', 'secret', 'shop', 'superSecret', 'treasure', 'vault' }) do
+          if math.type(state.overrides[v]) == 'integer' and state.overrides[v] >= 0 and state.overrides[v] <= 10 then
+            mod.state.overrides[v] = state.overrides[v]
+          end
+        end
       end
     end
   end
@@ -44,6 +74,7 @@ end
 
 function mod:onGameExit()
   mod:save()
+  mod:seedRng()
   mod.hasDataLoaded = false
 end
 
@@ -125,28 +156,216 @@ function mod:doRedRoomLogic()
 end
 
 function mod:makeAllRedRoomDoors()
+  local seeds = game:GetSeeds()
   local level = game:GetLevel()
   local stage = level:GetStage()
   local stageType = level:GetStageType()
+  local isRepentanceStageType = stageType == StageType.STAGETYPE_REPENTANCE or stageType == StageType.STAGETYPE_REPENTANCE_B
   local currentDimension = mod:getCurrentDimension()
   
   if stage == LevelStage.STAGE8 and currentDimension == 0 then -- home, red rooms are only available every other row and don't connect to each other
     level:MakeRedRoomDoor(95, DoorSlot.LEFT0) -- create the default red room closet
     return false
-  elseif (stage == LevelStage.STAGE2_2 or (mod:isCurseOfTheLabyrinth() and stage == LevelStage.STAGE2_1)) and (stageType == StageType.STAGETYPE_REPENTANCE or stageType == StageType.STAGETYPE_REPENTANCE_B) and
-         currentDimension == 1
-  then
+  elseif (stage == LevelStage.STAGE2_2 or (mod:isCurseOfTheLabyrinth() and stage == LevelStage.STAGE2_1)) and isRepentanceStageType and currentDimension == 1 then
     -- mines escape sequence
     return false
   else
     local illegalRedRooms = mod:getIllegalRedRooms()
     
-    for gridIdx = 0, 168 do -- full grid
-      mod:makeRedRoomDoors(gridIdx, illegalRedRooms)
+    if REPENTOGON and mod:hasOverrides() then
+      local rng = RNG(seeds:GetStageSeed(isRepentanceStageType and stage + 1 or stage), mod.state.perDimensionRng and mod.rngShiftIdx + currentDimension or mod.rngShiftIdx)
+      local redRoomConfigs = {}
+      
+      for gridIdx = 0, 168 do
+        local roomConfig = mod:makeRepentogonRedRoom(gridIdx, rng)
+        if roomConfig then
+          redRoomConfigs[gridIdx] = roomConfig
+        end
+      end
+      if stage == LevelStage.STAGE7 then -- the void
+        -- workaround: TryPlaceRoom doesn't place rooms next to boss rooms in the void right now
+        if currentDimension == 0 then
+          for gridIdx = 0, 168 do
+            mod:makeRedRoomDoors(gridIdx, illegalRedRooms)
+          end
+          for gridIdx = 0, 168 do
+            local roomConfig = redRoomConfigs[gridIdx]
+            if roomConfig then
+              mod:fixRepentogonRedRoom(gridIdx, roomConfig)
+            end
+          end
+          if MinimapAPI then -- this workaround causes issues with minimap api
+            MinimapAPI:ClearMap() -- MinimapAPI:ClearLevels()
+            MinimapAPI:LoadDefaultMap()
+            --MinimapAPI:updatePlayerPos()
+            --MinimapAPI:UpdateExternalMap()
+          end
+        end
+      elseif stage ~= LevelStage.STAGE6 then -- not sheol/cathedral
+        for _, gridIdx in ipairs({
+                                   0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+                                   13, 25, 26, 38, 39, 51, 52, 64, 65, 77, 78, 90, 91, 103, 104, 116, 117, 129, 130, 142, 143, 155,
+                                   156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168
+                                })
+        do
+          mod:makeRedRoomDoors(gridIdx, illegalRedRooms) -- add red room doors leading to error rooms at the edge of the map
+        end
+      end
+    else
+      for gridIdx = 0, 168 do -- full grid
+        mod:makeRedRoomDoors(gridIdx, illegalRedRooms)
+      end
+      mod:makeRedRoomDoors(0, illegalRedRooms) -- otherwise I AM ERROR rooms might not be available from this room
     end
-    mod:makeRedRoomDoors(0, illegalRedRooms) -- otherwise I AM ERROR rooms might not be available from this room
     
     return true
+  end
+end
+
+function mod:hasOverrides()
+  local totalWeight = 0
+  
+  for k, v in pairs(mod.state.overrides) do
+    if k ~= 'normalMult' and k ~= 'normalMult2' then
+      totalWeight = totalWeight + v
+    end
+  end
+  
+  return totalWeight > 0
+end
+
+function mod:makeRepentogonRedRoom(gridIdx, rng)
+  local level = game:GetLevel()
+  local stage = level:GetStage()
+  
+  local configToRoomType = {
+    normal       = RoomType.ROOM_DEFAULT,
+    normalMult   = RoomType.ROOM_DEFAULT,
+    normalMult2  = RoomType.ROOM_DEFAULT,
+    angel        = RoomType.ROOM_ANGEL,
+    arcade       = RoomType.ROOM_ARCADE,
+    bedroomClean = RoomType.ROOM_ISAACS,
+    bedroomDirty = RoomType.ROOM_BARREN,
+    curse        = RoomType.ROOM_CURSE,
+    devil        = RoomType.ROOM_DEVIL,
+    dice         = RoomType.ROOM_DICE,
+    library      = RoomType.ROOM_LIBRARY,
+    miniBoss     = RoomType.ROOM_MINIBOSS,
+    planetarium  = RoomType.ROOM_PLANETARIUM,
+    sacrifice    = RoomType.ROOM_SACRIFICE,
+    secret       = RoomType.ROOM_SECRET,
+    shop         = RoomType.ROOM_SHOP,
+    superSecret  = RoomType.ROOM_SUPERSECRET,
+    treasure     = RoomType.ROOM_TREASURE,
+    vault        = RoomType.ROOM_CHEST,
+  }
+  local overrides = {}
+  table.insert(overrides, {
+    roomType = RoomType.ROOM_DEFAULT,
+    weight = mod.state.overrides.normal * (mod.state.overrides.normalMult + 1) * (mod.state.overrides.normalMult2 + 1)
+  })
+  for k, v in pairs(mod.state.overrides) do
+    if configToRoomType[k] ~= RoomType.ROOM_DEFAULT then
+      table.insert(overrides, { roomType = configToRoomType[k], weight = v })
+    end
+  end
+  table.sort(overrides, function(a, b)
+    return a.roomType < b.roomType
+  end)
+  
+  local wop = WeightedOutcomePicker()
+  for _, v in ipairs(overrides) do
+    wop:AddOutcomeWeight(v.roomType, v.weight)
+  end
+  local roomType = wop:PickOutcome(rng)
+  
+  local seed = rng:Next()
+  local reduceWeight = true
+  local stbType = Isaac.GetCurrentStageConfigId()
+  local roomShape = RoomShape.ROOMSHAPE_1x1
+  local minVariant = 0
+  local maxVariant = -1
+  local minDifficulty = 0
+  local maxDifficulty = game:IsHardMode() and 15 or 10 -- todo: more red room difficulty testing
+  local requiredDoors = 1 << DoorSlot.LEFT0 | 1 << DoorSlot.UP0 | 1 << DoorSlot.RIGHT0 | 1 << DoorSlot.DOWN0
+  local subType = -1
+  local mode = -1
+  
+  if stage == LevelStage.STAGE7 then -- the void
+    local stbTypes = {
+      StbType.BASEMENT,
+      StbType.CELLAR,
+      StbType.BURNING_BASEMENT,
+      StbType.CAVES,
+      StbType.CATACOMBS,
+      StbType.FLOODED_CAVES,
+      StbType.DEPTHS,
+      StbType.NECROPOLIS,
+      StbType.DANK_DEPTHS,
+      StbType.WOMB,
+      StbType.UTERO,
+      StbType.SCARRED_WOMB,
+      StbType.SHEOL,
+      StbType.CATHEDRAL,
+      StbType.DARK_ROOM,
+      StbType.CHEST,
+    }
+    if Options.BetterVoidGeneration then
+      table.insert(stbTypes, StbType.DOWNPOUR)
+      table.insert(stbTypes, StbType.DROSS)
+      table.insert(stbTypes, StbType.MINES)
+      table.insert(stbTypes, StbType.ASHPIT)
+      table.insert(stbTypes, StbType.MAUSOLEUM)
+      table.insert(stbTypes, StbType.GEHENNA)
+      table.insert(stbTypes, StbType.CORPSE)
+    end
+    stbType = stbTypes[rng:RandomInt(#stbTypes) + 1]
+    maxDifficulty = 20
+  end
+  
+  -- curse rooms: voodoo head (subtype=1) doesn't apply to red rooms
+  -- treasure rooms: more options (subtype=1,3) applies automatically
+  -- treasure rooms: pay to win (subtype=2,3) doesn't apply to red rooms
+  -- shops: tainted keeper (subtype=1xx) doesn't apply to red rooms (check shop level?)
+  -- arcades: cain birthright (subtype=1) doesn't apply to red rooms
+  if roomType == RoomType.ROOM_DEVIL then
+    if mod:hasTrinket(TrinketType.TRINKET_NUMBER_MAGNET) then
+      subType = 1
+    else
+      subType = 0
+    end
+  elseif roomType == RoomType.ROOM_ANGEL then
+    subType = 0 -- 1 is angel shop, 666 is sheol/cathedral portal
+  elseif roomType == RoomType.ROOM_ISAACS then
+    subType = 0 -- 99 is genesis room
+  end
+  
+  local roomConfig = RoomConfigHolder.GetRandomRoom(seed, reduceWeight, stbType, roomType, roomShape, minVariant, maxVariant, minDifficulty, maxDifficulty, requiredDoors, subType, mode)
+  if not roomConfig then
+    roomConfig = RoomConfigHolder.GetRandomRoom(seed, reduceWeight, StbType.SPECIAL_ROOMS, roomType, roomShape, minVariant, maxVariant, minDifficulty, maxDifficulty, requiredDoors, subType, mode)
+  end
+  if not roomConfig then
+    roomConfig = RoomConfigHolder.GetRandomRoom(seed, reduceWeight, stbType, RoomType.ROOM_DEFAULT, roomShape, minVariant, maxVariant, minDifficulty, maxDifficulty, requiredDoors, -1, mode)
+  end
+  
+  if roomConfig then
+    local roomDesc = level:TryPlaceRoom(roomConfig, gridIdx, -1, 0, true, true, true)
+    if roomDesc then
+      roomDesc.Flags = roomDesc.Flags | RoomDescriptor.FLAG_RED_ROOM
+    end
+    
+    return roomConfig
+  end
+end
+
+function mod:fixRepentogonRedRoom(gridIdx, roomConfig)
+  local level = game:GetLevel()
+  local roomDesc = level:GetRoomByIdx(gridIdx, -1)
+  
+  if roomDesc.GridIndex >= 0 and roomDesc.Data and roomDesc.Data.Shape == RoomShape.ROOMSHAPE_1x1 and mod:isRedRoom(roomDesc) then
+    if not (roomDesc.Data.StageID == roomConfig.StageID and roomDesc.Data.Type == roomConfig.Type and roomDesc.Data.Variant == roomConfig.Variant) then
+      roomDesc.Data = roomConfig
+    end
   end
 end
 
@@ -626,6 +845,18 @@ function mod:isCurseOfTheLabyrinth()
   return curses & curse == curse
 end
 
+function mod:hasTrinket(trinket)
+  for i = 0, game:GetNumPlayers() - 1 do
+    local player = game:GetPlayer(i)
+    
+    if player:HasTrinket(trinket, false) then
+      return true
+    end
+  end
+  
+  return false
+end
+
 function mod:getEnabledOptionsIndex(option)
   for i, value in ipairs(mod.enabledOptions) do
     if option == value then
@@ -646,15 +877,27 @@ function mod:tableHasValue(tbl, val)
   return false
 end
 
+function mod:seedRng()
+  repeat
+    local rand = Random()  -- 0 to 2^32
+    if rand > 0 then       -- if this is 0, it causes a crash later on
+      mod.rng:SetSeed(rand, mod.rngShiftIdx)
+    end
+  until(rand > 0)
+end
+
 -- start ModConfigMenu --
 function mod:setupModConfigMenu()
-  for _, v in ipairs({ 'ARRATT' }) do
-    ModConfigMenu.RemoveSubcategory(v, mod.Name)
+  local category = 'ARRATT'
+  for _, v in ipairs({ 'Settings', 'Overrides' }) do
+    ModConfigMenu.RemoveSubcategory(category, v)
   end
-  ModConfigMenu.AddText('ARRATT', mod.Name, 'Choose where to enable this mod:')
+  ModConfigMenu.AddTitle(category, 'Settings', mod.Name)
+  ModConfigMenu.AddSpace(category, 'Settings')
+  ModConfigMenu.AddText(category, 'Settings', 'Choose where to enable this mod:')
   ModConfigMenu.AddSetting(
-    'ARRATT',
-    mod.Name,
+    category,
+    'Settings',
     {
       Type = ModConfigMenu.OptionType.NUMBER,
       CurrentSetting = function()
@@ -672,10 +915,10 @@ function mod:setupModConfigMenu()
       Info = { 'Red rooms are only created at the', 'start of a new level or dimension' }
     }
   )
-  ModConfigMenu.AddSpace('ARRATT', mod.Name)
+  ModConfigMenu.AddSpace(category, 'Settings')
   ModConfigMenu.AddSetting(
-    'ARRATT',
-    mod.Name,
+    category,
+    'Settings',
     {
       Type = ModConfigMenu.OptionType.BOOLEAN,
       CurrentSetting = function()
@@ -692,8 +935,8 @@ function mod:setupModConfigMenu()
     }
   )
   ModConfigMenu.AddSetting(
-    'ARRATT',
-    mod.Name,
+    category,
+    'Settings',
     {
       Type = ModConfigMenu.OptionType.BOOLEAN,
       CurrentSetting = function()
@@ -709,9 +952,114 @@ function mod:setupModConfigMenu()
       Info = { 'Yes: reload first room to fix transient issues', 'No: set this if you\'re trying to play true co-op', 'This applies to all first rooms in all levels' }
     }
   )
+  ModConfigMenu.AddSetting(
+    category,
+    'Settings',
+    {
+      Type = ModConfigMenu.OptionType.BOOLEAN,
+      CurrentSetting = function()
+        return mod.state.perDimensionRng
+      end,
+      Display = function()
+        return 'RNG: per ' .. (mod.state.perDimensionRng and 'level + dimension' or 'level')
+      end,
+      OnChange = function(b)
+        mod.state.perDimensionRng = b
+        mod:save()
+      end,
+      Info = { 'Per dimension only works with overrides' }
+    }
+  )
+  ModConfigMenu.AddSetting(
+    category,
+    'Overrides',
+    {
+      Type = ModConfigMenu.OptionType.BOOLEAN,
+      CurrentSetting = function()
+        return false
+      end,
+      Display = function()
+        return 'Reset'
+      end,
+      OnChange = function(b)
+        for k, _ in pairs(mod.state.overrides) do
+          mod.state.overrides[k] = 0
+        end
+        mod:save()
+      end,
+      Info = { 'Reset the values below to zero' }
+    }
+  )
+  ModConfigMenu.AddSetting(
+    category,
+    'Overrides',
+    {
+      Type = ModConfigMenu.OptionType.BOOLEAN,
+      CurrentSetting = function()
+        return false
+      end,
+      Display = function()
+        return 'Randomize'
+      end,
+      OnChange = function(b)
+        for k, _ in pairs(mod.state.overrides) do
+          mod.state.overrides[k] = mod.rng:RandomInt(11)
+        end
+        mod:save(true)
+      end,
+      Info = { 'Randomize the values below' }
+    }
+  )
+  ModConfigMenu.AddSpace(category, 'Overrides')
+  for _, v in ipairs({
+                      { name = 'Normal room'       , field = 'normal' },
+                      { name = 'Normal room (mult)', field = 'normalMult' },
+                      { name = 'Normal room (mult)', field = 'normalMult2' },
+                      { name = 'Angel room'        , field = 'angel' },
+                      { name = 'Arcade'            , field = 'arcade' },
+                      { name = 'Bedroom (clean)'   , field = 'bedroomClean' },
+                      { name = 'Bedroom (dirty)'   , field = 'bedroomDirty' },
+                      { name = 'Curse room'        , field = 'curse' },
+                      { name = 'Devil room'        , field = 'devil' },
+                      { name = 'Dice room'         , field = 'dice' },
+                      { name = 'Library'           , field = 'library' },
+                      { name = 'Mini-boss'         , field = 'miniBoss' },
+                      { name = 'Planetarium'       , field = 'planetarium' },
+                      { name = 'Sacrifice room'    , field = 'sacrifice' },
+                      { name = 'Secret room'       , field = 'secret' },
+                      { name = 'Shop'              , field = 'shop' },
+                      { name = 'Super secret room' , field = 'superSecret' },
+                      { name = 'Treasure room'     , field = 'treasure' },
+                      { name = 'Vault'             , field = 'vault' },
+                    })
+  do
+    ModConfigMenu.AddSetting(
+      category,
+      'Overrides',
+      {
+        Type = ModConfigMenu.OptionType.SCROLL,
+        CurrentSetting = function()
+          return mod.state.overrides[v.field]
+        end,
+        Display = function()
+          local s = v.name .. ': $scroll' .. mod.state.overrides[v.field]
+          if v.field == 'normal' then
+            s = s .. ' ' .. mod.state.overrides.normal * (mod.state.overrides.normalMult + 1) * (mod.state.overrides.normalMult2 + 1)
+          end
+          return s
+        end,
+        OnChange = function(n)
+          mod.state.overrides[v.field] = n
+          mod:save()
+        end,
+        Info = { 'Choose relative weights for red room overrides', 'Requires repentogon' }
+      }
+    )
+  end
 end
 -- end ModConfigMenu --
 
+mod:seedRng()
 mod:AddCallback(ModCallbacks.MC_POST_GAME_STARTED, mod.onGameStart)
 mod:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, mod.onGameExit)
 mod:AddCallback(ModCallbacks.MC_POST_NEW_LEVEL, mod.onNewLevel)
