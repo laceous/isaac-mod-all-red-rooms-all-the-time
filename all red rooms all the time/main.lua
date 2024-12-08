@@ -331,6 +331,15 @@ function mod:makeRepentogonRedRoom(gridIdx, rng)
     maxDifficulty = 20
   end
   
+  if mod:getCurrentDimension() == 2 then -- death certificate
+    stbType = StbType.HOME
+    
+    if roomType == RoomType.ROOM_DEFAULT then
+      local subTypes = { 0, 2 } -- 0 = isaac's bedroom, 2 = mom's bedroom, 30s = death certificate rooms
+      subType = subTypes[rng:RandomInt(#subTypes) + 1] -- can't set a subType range
+    end
+  end
+  
   -- curse rooms: voodoo head (subtype=1) doesn't apply to red rooms
   -- treasure rooms: more options (subtype=1,3) applies automatically
   -- treasure rooms: pay to win (subtype=2,3) doesn't apply to red rooms
@@ -351,9 +360,6 @@ function mod:makeRepentogonRedRoom(gridIdx, rng)
   local roomConfig = RoomConfigHolder.GetRandomRoom(seed, reduceWeight, stbType, roomType, roomShape, minVariant, maxVariant, minDifficulty, maxDifficulty, requiredDoors, subType, mode)
   if not roomConfig then
     roomConfig = RoomConfigHolder.GetRandomRoom(seed, reduceWeight, StbType.SPECIAL_ROOMS, roomType, roomShape, minVariant, maxVariant, minDifficulty, maxDifficulty, requiredDoors, subType, mode)
-  end
-  if not roomConfig then
-    roomConfig = RoomConfigHolder.GetRandomRoom(seed, reduceWeight, stbType, RoomType.ROOM_DEFAULT, roomShape, minVariant, maxVariant, minDifficulty, maxDifficulty, requiredDoors, -1, mode)
   end
   
   if roomConfig then
@@ -1060,7 +1066,7 @@ function mod:setupModConfigMenu()
           mod.state.overrides[v.field] = n
           mod:save()
         end,
-        Info = { 'Choose relative weights for red room overrides', 'Requires repentogon' }
+        Info = { 'Choose relative weights for red room overrides', '(requires repentogon)' }
       }
     )
   end
