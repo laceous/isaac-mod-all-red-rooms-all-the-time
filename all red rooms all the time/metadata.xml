@@ -18,7 +18,7 @@ By default, any red room doors that lead to I AM ERROR rooms will automatically 
 Sometimes red room doors in the first room don't show up correctly. By default, the first room is reloaded to work around this issue. This can break true co-op so it can be toggled via Mod Config Menu.
 
 Update: You can now choose how often different room types show up in the red rooms that this mod generates (requires Repentogon).</description>
-    <version>1.14</version>
+    <version>1.15</version>
     <visibility>Public</visibility>
     <tag id="Lua"/>
     <tag id="Rooms"/>

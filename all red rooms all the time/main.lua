@@ -190,26 +190,26 @@ function mod:makeAllRedRoomDoors()
           redRoomConfigs[gridIdx] = roomConfig
         end
       end
-      if stage == LevelStage.STAGE7 then -- the void
-        -- workaround: TryPlaceRoom doesn't place rooms next to boss rooms in the void right now
-        if currentDimension == 0 then
-          for gridIdx = 0, 168 do
-            mod:makeRedRoomDoors(gridIdx, illegalRedRooms)
-          end
-          for gridIdx = 0, 168 do
-            local roomConfig = redRoomConfigs[gridIdx]
-            if roomConfig then
-              mod:fixRepentogonRedRoom(gridIdx, roomConfig)
-            end
-          end
-          if MinimapAPI then -- this workaround causes issues with minimap api
-            MinimapAPI:ClearMap() -- MinimapAPI:ClearLevels()
-            MinimapAPI:LoadDefaultMap()
-            --MinimapAPI:updatePlayerPos()
-            --MinimapAPI:UpdateExternalMap()
+      if (stage == LevelStage.STAGE7 and currentDimension == 0) or -- the void
+         ((stage == LevelStage.STAGE1_2 or (mod:isCurseOfTheLabyrinth() and stage == LevelStage.STAGE1_1)) and isRepentanceStageType and currentDimension == 1) -- level:HasMirrorDimension
+      then
+        -- workaround: TryPlaceRoom doesn't place rooms next to boss rooms in the void right now (or the mirror dimension)
+        for gridIdx = 0, 168 do
+          mod:makeRedRoomDoors(gridIdx, illegalRedRooms)
+        end
+        for gridIdx = 0, 168 do
+          local roomConfig = redRoomConfigs[gridIdx]
+          if roomConfig then
+            mod:fixRepentogonRedRoom(gridIdx, roomConfig)
           end
         end
-      elseif stage ~= LevelStage.STAGE6 then -- not sheol/cathedral
+        if MinimapAPI then -- this workaround causes issues with minimap api
+          MinimapAPI:ClearMap() -- MinimapAPI:ClearLevels()
+          MinimapAPI:LoadDefaultMap()
+          --MinimapAPI:updatePlayerPos()
+          --MinimapAPI:UpdateExternalMap()
+        end
+      elseif stage ~= LevelStage.STAGE6 and stage ~= LevelStage.STAGE7 then -- not sheol/cathedral/void
         for _, gridIdx in ipairs({
                                    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
                                    13, 25, 26, 38, 39, 51, 52, 64, 65, 77, 78, 90, 91, 103, 104, 116, 117, 129, 130, 142, 143, 155,
