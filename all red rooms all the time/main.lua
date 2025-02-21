@@ -124,8 +124,15 @@ function mod:reloadFirstRoom()
     -- subtypes: 0 = treasure, 1 = boss, 2 = secret
     local portals = Isaac.FindByType(EntityType.ENTITY_EFFECT, EffectVariant.PORTAL_TELEPORT, -1, false, false)
     
+    -- fix true co-op
+    local trueCoopEnabled = game:GetStateFlag(GameStateFlag.STATE_BOSSPOOL_SWITCHED) == false -- repurposed
+    
     level.LeaveDoor = DoorSlot.NO_DOOR_SLOT
     game:ChangeRoom(level:GetCurrentRoomIndex(), -1)
+    
+    if trueCoopEnabled then
+      game:SetStateFlag(GameStateFlag.STATE_BOSSPOOL_SWITCHED, false)
+    end
     
     for _, v in ipairs(portals) do
       game:Spawn(v.Type, v.Variant, v.Position, v.Velocity, nil, v.SubType, v.InitSeed) -- v.SpawnerEntity
@@ -963,7 +970,7 @@ function mod:setupModConfigMenu()
         mod.state.reloadFirstRoom = b
         mod:save()
       end,
-      Info = { 'Yes: reload first room to fix transient issues', 'No: set this if you\'re trying to play true co-op', 'This applies to all first rooms in all levels' }
+      Info = { 'Yes: reload first room to fix transient issues', 'No: set this if you encounter any issues with yes', 'This applies to all first rooms in all levels' }
     }
   )
   ModConfigMenu.AddSetting(
