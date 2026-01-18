@@ -112,7 +112,13 @@ end
 function mod:isDisabled()
   mod:loadData()
   return mod.state.enabledOption == 'disabled' or
-         (Isaac.GetChallenge() ~= Challenge.CHALLENGE_NULL and mod.state.enabledOption ~= 'normal + hard + challenges') or
+         (
+           (
+             Isaac.GetChallenge() ~= Challenge.CHALLENGE_NULL or
+             (REPENTOGON and game:GetSeeds():IsCustomRun() and DailyChallenge.GetChallengeParams():GetEndStage() > 0)
+           ) and
+           mod.state.enabledOption ~= 'normal + hard + challenges'
+         ) or
          game:IsGreedMode()
 end
 
